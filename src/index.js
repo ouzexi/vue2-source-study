@@ -1,3 +1,10 @@
-export const a = 100;
+import { initMixin } from "./init";
 
-export default { a: 1 }
+// Vue构造函数
+function Vue(options) {
+    this._init(options)
+}
+
+initMixin(Vue); // 扩展了init方法
+
+export default Vue;
