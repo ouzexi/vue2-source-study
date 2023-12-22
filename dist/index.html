@@ -11,9 +11,16 @@
         const vm = new Vue({
             data: {
                 name: 'zf',
-                age: 20
+                age: 20,
+                addr: {
+                    '武侯区': 4401,
+                    '高要区': 4402
+                }
             }
-        })
+        });
+        console.log(vm.name)
+        vm.addr['武侯区'] = 4403
+        console.log(vm)
     </script>
 </body>
 </html>
