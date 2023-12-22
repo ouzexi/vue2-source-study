@@ -15,12 +15,11 @@
                 addr: {
                     '武侯区': 4401,
                     '高要区': 4402
-                }
+                },
+                hobby: ['eat', 'dance', {a: 1}]
             }
         });
-        console.log(vm.name)
-        vm.addr['武侯区'] = 4403
-        console.log(vm)
+        vm.hobby.unshift({b: 2})
     </script>
 </body>
 </html>

@@ -50,11 +50,70 @@
     return Constructor;
   }
 
+  // 保留数组的原型
+  var oldArrayProto = Array.prototype;
+  // 以数组的原型作为原型创建新的原型对象（newArrayProto.__proto__ = oldArrayProto），
+  // 这样重写的方法只会存在newArrayProto上，不会污染oldArrayProto
+  var newArrayProto = Object.create(oldArrayProto);
+
+  // 需重写的7个变异方法
+  var methods = ['push', 'pop', 'shift', 'unshift', 'reverse', 'sort', 'splice'];
+  methods.forEach(function (method) {
+    // 重写的方法挂载到newArrayProto上
+    newArrayProto[method] = function () {
+      var _oldArrayProto$method;
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+      // 内部调用原来的方法，面向切片编程
+      // 如 arr.push(1, 2, 3)，this为arr，args为[1, 2, 3]
+      var result = (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
+
+      // 获取数组新增的数据
+      var inserted;
+      var ob = this.__ob__;
+      switch (method) {
+        case 'push':
+        case 'unshift':
+          inserted = args;
+          break;
+        case 'splice':
+          // 如新增元素时，只需获取第2个下标后的数据：arr.splice(0, 1, {a: 1}, {b: 2})
+          inserted = args.slice(2);
+          console.log(inserted[0] === args[2]);
+          break;
+      }
+
+      // 对新增的数据再次进行劫持
+      if (inserted) {
+        ob.observeArray(inserted);
+      }
+      return result;
+    };
+  });
+
   var Observer = /*#__PURE__*/function () {
     // Object.defineProperty只能劫持已经存在的属性（vue里面会为此单独写一些api $set $delete）
     function Observer(data) {
       _classCallCheck(this, Observer);
-      this.walk(data);
+      // 需要给对象添加一个__ob__属性，赋值为this，有2个作用
+      // 1、数组对新增的数据再次进行劫持，需要调用this的observeArray方法
+      // 2、如果一个对象存在Observer类型的__ob__属性，说明被劫持过了，就不需要再被劫持了
+      // 另外，需要设置__ob__属性为不可枚举，否则遍历到__ob__属性为一个对象，会被调用observe方法劫持，又给它本身挂载一个__ob__属性，死循环。
+      Object.defineProperty(data, '__ob__', {
+        value: this,
+        enumerable: false
+      });
+      if (Array.isArray(data)) {
+        // 数组项一旦多了，每个项都劫持对性能不好，所以重写数组中7个变异方法，是可以修改数组本身
+
+        // 需要保留数组原有的特性，并且重写部分方法
+        data.__proto__ = newArrayProto;
+        // 如果数组中存在属性是对象，可以监听到对象的变化
+        this.observeArray(data);
+      } else {
+        this.walk(data);
+      }
     }
     _createClass(Observer, [{
       key: "walk",
@@ -63,6 +122,13 @@
         // 重新定义属性
         Object.keys(data).forEach(function (key) {
           return defineReactive(data, key, data[key]);
+        });
+      }
+    }, {
+      key: "observeArray",
+      value: function observeArray(data) {
+        data.forEach(function (item) {
+          return observe(item);
         });
       }
     }]);
@@ -79,6 +145,8 @@
       },
       set: function set(newVal) {
         console.log('设置值');
+        // 如果设置的新值是对象的话，也要进行劫持后再赋值
+        observe(newVal);
         if (newVal === value) return;
         value = newVal;
       }
@@ -91,6 +159,9 @@
     }
 
     // 如果一个对象被劫持过了，就不需要再被劫持了（要判断一个对象是否被劫持过，可以增添一个实例，用实例判断是否被劫持过）
+    if (data.__ob__ instanceof Observer) {
+      return data.__ob__;
+    }
     return new Observer(data);
   }
 
