@@ -4,9 +4,146 @@
     (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+    var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*";
+    var qnameCapture = "((?:".concat(ncname, "\\:)?").concat(ncname, ")");
+    // 匹配到的分组是一个 标签名  <xxx 匹配到的是开始 标签的名字
+    var startTagOpen = new RegExp("^<".concat(qnameCapture));
+    // 匹配到的是</xxxx>  最终匹配到的分组就是结束标签的名字
+    var endTag = new RegExp("^<\\/".concat(qnameCapture, "[^>]*>"));
+    // 匹配属性 第一个分组就是属性的key value 就是 分组3/分组4/分组5
+    var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
+    // 开始标签的结束位置 <div attrs='xxx'> <br/>
+    var startTagClose = /^\s*(\/?)>/;
+
+    // vue3采用的不是正则
+    // 对模板进行编译处理
+    function parseHTML(html) {
+      var ELEMENT_TYPE = 1;
+      var TEXT_TYPE = 3;
+      // 存放元素的栈
+      var stack = [];
+      // 指向栈中最后一个元素
+      var currentParent;
+      // 根节点
+      var root;
+
+      // 最终需要转化成一颗抽象语法树
+      function createASTElement(tag, attrs) {
+        return {
+          tag: tag,
+          type: ELEMENT_TYPE,
+          children: [],
+          attrs: attrs,
+          parent: null
+        };
+      }
+      function start(tag, attrs) {
+        // 创建一个ast节点
+        var node = createASTElement(tag, attrs);
+        // 如果为空树，则当前节点为树的根节点
+        if (!root) {
+          root = node;
+        }
+        // 当前节点的父节点为栈中最后一个节点
+        if (currentParent) {
+          // 设置当前节点的父节点
+          node.parent = currentParent;
+          // 同时设置当前节点的父节点的子节点为自身
+          currentParent.children.push(node);
+        }
+        stack.push(node);
+        // currentParent指向栈中最后一个
+        currentParent = node;
+      }
+      function chars(text) {
+        text = text.replace(/\s/g, '');
+        // 文本直接作为当前指向的节点的子元素
+        text && currentParent.children.push({
+          type: TEXT_TYPE,
+          text: text,
+          parent: currentParent
+        });
+      }
+      function end(tag) {
+        // 弹出最后一个（检验标签是否合法-待完成）
+        // 此时该节点包括它的子节点的ast树已构造完毕
+        stack.pop();
+        // 指向该节点的父元素 继续构造
+        currentParent = stack[stack.length - 1];
+      }
+      function advance(n) {
+        html = html.substring(n);
+      }
+      function parseStartTag() {
+        var start = html.match(startTagOpen);
+        if (start) {
+          var match = {
+            // match第一个分组是标签名
+            tagName: start[1],
+            attrs: []
+          };
+          // 匹配到的字符舍弃 继续前进遍历html模板
+          advance(start[0].length);
+
+          // 如果不是开始标签的结束位置 就一直匹配 获取属性<div attr='xxx' />
+          var attr, _end;
+          while (!(_end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+            advance(attr[0].length);
+            match.attrs.push({
+              name: attr[1],
+              value: attr[3] || attr[4] || attr[5]
+            });
+          }
+          // 前进到结束闭合 > 符号，说明这一个标签上部分已经匹配完 如<div attr='x'>已匹配完 </div>未匹配
+          if (_end) {
+            advance(_end[0].length);
+          }
+          return match;
+        }
+        // 否则不是开始标签
+        return false;
+      }
+
+      // html最开始肯定是一个<
+      while (html) {
+        // 如果textEnd为0 则说明是个开始或者自闭合结束标签 <div> / <div />
+        // 如果textEnd > 0 则说明是文本的结束位置 </div>
+        var textEnd = html.indexOf('<');
+        if (textEnd === 0) {
+          // 开始标签的匹配结果
+          var startTagMatch = parseStartTag();
+          if (startTagMatch) {
+            start(startTagMatch.tagName, startTagMatch.attrs);
+            continue;
+          }
+          // 结束标签的匹配结果
+          var endTagMatch = html.match(endTag);
+          if (endTagMatch) {
+            advance(endTagMatch[0].length);
+            end(endTagMatch[1]);
+            continue;
+          }
+        }
+        if (textEnd > 0) {
+          console.log(html);
+          // 文本内容
+          var text = html.substring(0, textEnd);
+          if (text) {
+            chars(text);
+            // 解析完文本后继续前进
+            advance(text.length);
+          }
+        }
+      }
+      console.log(root);
+      return root;
+    }
+
     // 对模板进行编译处理
     function compileToFunction(template) {
-      console.log(template);
+      // 1、将template转化成ast语法树
+      parseHTML(template);
+      // 2、生成render方法（render方法执行后的返回的结果就是虚拟DOM）
     }
 
     function _toPrimitive(t, r) {

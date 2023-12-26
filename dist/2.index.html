@@ -7,7 +7,9 @@
 </head>
 <body>
     <div id="app">
-        <div>{{ name }}</div>
+        <div style="color: red;">
+            {{ name }} hello
+        </div>
         <span>{{ age }}</span>
     </div>
     <script src="vue.js"></script>
@@ -23,7 +25,7 @@
                 hobby: ['eat', 'dance', {a: 1}]
             },
             el: '#app', // 我们要将数据 解析到el元素上
-            template: `<div>hello</div>`
+            // template: `<div>hello</div>`
             /* render() {
                 return h('div', {}, 'test')
             } */
