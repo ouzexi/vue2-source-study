@@ -1,3 +1,4 @@
+import Watcher from "./observe/watcher";
 import { createElementVNode, createTextVNode } from "./vdom/index";
 
 function patchProps(el, props) {
@@ -44,6 +45,8 @@ function patch(oldVNode, vnode) {
         parentElm.insertBefore(newElm, elm.nextSibling);
         // 移除原节点
         parentElm.removeChild(elm);
+
+        return newElm;
     } else {
         // diff算法
     }
@@ -84,7 +87,10 @@ export function mountComponent(vm, el) {
     // $el为querySelector获取的真实DOM
     vm.$el = el;
     // 1、调用render方法生成虚拟节点 虚拟DOM
-    vm._update(vm._render());
+    const updateComponent = () => {
+        vm._update(vm._render());
+    }
+    const watcher = new Watcher(vm, updateComponent, true);
     // 2、根据虚拟DOM生成真实DOM
     // 3、插入到el元素中
 }

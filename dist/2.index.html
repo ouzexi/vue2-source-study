@@ -8,7 +8,7 @@
 <body>
     <div id="app" style="background: yellow;">
         <div style="color: red;background: green" key='123'>
-            {{ name }} hello {{ age }} hello
+            {{ name }} hello {{ age }} {{ name }} hello
         </div>
         <li>world</li>
     </div>
@@ -30,6 +30,11 @@
                 return h('div', {}, 'test')
             } */
         });
+
+        setTimeout(() => {
+            vm.name = 'ouzx'
+            vm.age = 24
+        }, 2000)
 
         // vm.$mount('#app'); // 也可以手动用$mount方法挂载，效果一样。
 

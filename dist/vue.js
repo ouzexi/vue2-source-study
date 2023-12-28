@@ -329,6 +329,101 @@
     return render;
   }
 
+  // 每个属性对应一个id
+  // 一个属性对象多个watcher（视图） 因为一个属性可以在多个组件存在
+  var id$1 = 0;
+  var Dep = /*#__PURE__*/function () {
+    function Dep() {
+      _classCallCheck(this, Dep);
+      // 属性的dep要收集watcher
+      this.id = id$1++;
+      // 存放当前属性对应的watcher有哪些
+      this.subs = [];
+    }
+
+    // dep和watcher是多对多关系
+    // 一个属性可以在多个组件中使用 - 一个dep对应多个watcher
+    // 一个组件存在多个属性 - 一个watcher对应多个dep
+    // 所以建立双向关系 dep调用depend时当前watcher（组件/视图）会把这个dep存起来
+    // 同时这个dep会调用addSub把当前watcher也存起来
+    _createClass(Dep, [{
+      key: "depend",
+      value: function depend() {
+        Dep.target.addDep(this);
+      }
+    }, {
+      key: "addSub",
+      value: function addSub(watcher) {
+        this.subs.push(watcher);
+      }
+
+      // 属性修改时，会通知使用到这个属性的视图进行更新操作
+    }, {
+      key: "notify",
+      value: function notify() {
+        this.subs.forEach(function (watcher) {
+          return watcher.update();
+        });
+      }
+    }]);
+    return Dep;
+  }();
+  Dep.target = null;
+
+  /* 
+      1）当创建渲染watcher时会把当前渲染的watcher对象赋值到Dep.target上
+      2）调用_render会取值 走到get上
+      每个属性有一个dep（属性就是被观察者），watcher就是观察者（属性变化后会通知观察者更新） --- 观察者模式
+  */
+
+  var id = 0;
+  var Watcher = /*#__PURE__*/function () {
+    function Watcher(vm, fn, options) {
+      _classCallCheck(this, Watcher);
+      this.id = id++;
+      // 表示是一个渲染watcher
+      this.renderWatcher = options;
+      // 表示调用这个函数可以发生取值操作
+      this.getter = fn;
+      // 实现计算属性和进行一些清理工作需要用到
+      this.deps = [];
+      // 每个属性的dep对应一个depId，避免重复收集
+      this.depsId = new Set();
+      this.get();
+    }
+    _createClass(Watcher, [{
+      key: "addDep",
+      value: function addDep(dep) {
+        // 一个组件对应多个属性 重复的属性不用记录 比如 <div>{{name}} {{age}} {{name}} {{name}}</div>
+        var id = dep.id;
+        if (!this.depsId.has(id)) {
+          this.deps.push(dep);
+          this.depsId.add(id);
+          // watcher已经记住dep并且去重了，此时让dep也记住watcher
+          dep.addSub(this);
+        }
+      }
+    }, {
+      key: "get",
+      value: function get() {
+        // 将收集器的目标设置为当前视图
+        Dep.target = this;
+        // 调用getter即vm._update(vm._render)会调用render方法生成虚拟dom
+        // render方法会在vm上取值如vm.name vm.age
+        // 此时触发属性的dep收集依赖
+        this.getter();
+        // render渲染完毕后重置
+        Dep.target = null;
+      }
+    }, {
+      key: "update",
+      value: function update() {
+        this.get();
+      }
+    }]);
+    return Watcher;
+  }();
+
   // _h() _c() 传入实例 标签名 标签属性 子节点
   function createElementVNode(vm, tag, data) {
     if (data == null) data = {};
@@ -386,7 +481,6 @@
     } else {
       vnode.el = document.createTextNode(text);
     }
-    console.log(vnode);
     return vnode.el;
   }
 
@@ -405,6 +499,7 @@
       parentElm.insertBefore(newElm, elm.nextSibling);
       // 移除原节点
       parentElm.removeChild(elm);
+      return newElm;
     }
   }
   function initLifeCycle(Vue) {
@@ -439,7 +534,10 @@
     // $el为querySelector获取的真实DOM
     vm.$el = el;
     // 1、调用render方法生成虚拟节点 虚拟DOM
-    vm._update(vm._render());
+    var updateComponent = function updateComponent() {
+      vm._update(vm._render());
+    };
+    new Watcher(vm, updateComponent, true);
     // 2、根据虚拟DOM生成真实DOM
     // 3、插入到el元素中
   }
@@ -537,17 +635,26 @@
     // 属性的属性也可能是对象，需要递归劫持
     observe(value);
     // 这里的value相当于全局的闭包，let value = null
+
+    // 每个属性都有一个Dep对象
+    var dep = new Dep();
     Object.defineProperty(target, key, {
       get: function get() {
-        console.log('获取值');
+        if (Dep.target) {
+          // 让这个属性的收集器dep记住当前的watcher
+          // 同时当前的watcher会记住这个属性的收集器
+          dep.depend();
+        }
         return value;
       },
       set: function set(newVal) {
-        console.log('设置值');
         // 如果设置的新值是对象的话，也要进行劫持后再赋值
         observe(newVal);
         if (newVal === value) return;
         value = newVal;
+
+        // 属性变化，通知视图更新
+        dep.notify();
       }
     });
   }
