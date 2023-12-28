@@ -1,4 +1,5 @@
 import { compileToFunction } from './compiler/index.js';
+import { mountComponent } from './lifecycle.js';
 import { observe } from './observe/index'
 
 export function initMixin(Vue) { // 给Vue增加init方法
@@ -41,6 +42,8 @@ export function initMixin(Vue) { // 给Vue增加init方法
                 ops.render = render;
             }
         }
+        // 组件的挂载，将vm实例挂载到el上
+        mountComponent(vm, el)
 
         // script标签引用的vue.global.js 这个编译过程是在浏览器运行的
         // runtime 和 runtimeWithCompiler的区别就是多了一个compileToFunction步骤

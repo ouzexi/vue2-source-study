@@ -72,7 +72,7 @@ function codegen(ast) {
     let children = genChildren(ast.children);
     // console.log("🚀 ~ file: index.js:73 ~ codegen ~ children:", children)
     // _c('div', {id: 'app'}, _v(_s(name) + 'hello'))
-    let code = (`_c('${ast.tag}', ${ast.attrs.length > 0 ? genProps(ast.attrs) : 'null'}${ast.children.length ? `, ${children}` : ''}`);
+    let code = (`_c('${ast.tag}', ${ast.attrs.length > 0 ? genProps(ast.attrs) : 'null'}${ast.children.length ? `, ${children}` : ''})`);
     return code;
 }
 
@@ -82,5 +82,10 @@ export function compileToFunction(template) {
     let ast = parseHTML(template);
     // 2、生成render方法（render方法执行后的返回的结果就是虚拟DOM）
     let code = codegen(ast);
-    // console.log("🚀 ~ file: index.js:85 ~ compileToFunction ~ code:", code)
+    
+    // 将this指向当前实例vm 就可以访问当前实例的name、age
+    code = `with(this) {return ${code}}`;
+    let render = new Function(code);
+    // 生成render函数
+    return render;
 }

@@ -220,7 +220,7 @@
         }
       }
       if (textEnd > 0) {
-        console.log(html);
+        // console.log(html)
         // 文本内容
         var text = html.substring(0, textEnd);
         if (text) {
@@ -309,9 +309,9 @@
   }
   function codegen(ast) {
     var children = genChildren(ast.children);
-    console.log("🚀 ~ file: index.js:73 ~ codegen ~ children:", children);
+    // console.log("🚀 ~ file: index.js:73 ~ codegen ~ children:", children)
     // _c('div', {id: 'app'}, _v(_s(name) + 'hello'))
-    var code = "_c('".concat(ast.tag, "', ").concat(ast.attrs.length > 0 ? genProps(ast.attrs) : 'null').concat(ast.children.length ? ", ".concat(children) : '');
+    var code = "_c('".concat(ast.tag, "', ").concat(ast.attrs.length > 0 ? genProps(ast.attrs) : 'null').concat(ast.children.length ? ", ".concat(children) : '', ")");
     return code;
   }
 
@@ -322,6 +322,24 @@
     // 2、生成render方法（render方法执行后的返回的结果就是虚拟DOM）
     var code = codegen(ast);
     console.log("🚀 ~ file: index.js:85 ~ compileToFunction ~ code:", code);
+    // console.log("🚀 ~ file: index.js:85 ~ compileToFunction ~ code:", code)
+    // 将this指向当前实例vm 就可以访问当前实例的name、age
+    code = "with(this) {return ".concat(code, "}");
+    var render = new Function(code);
+    // 生成render函数
+    return render;
+  }
+
+  function initLifeCycle(Vue) {
+    Vue.prototype._update = function () {
+      console.log('update');
+    };
+    Vue.prototype._render = function () {
+      console.log('render');
+    };
+  }
+  function mountComponent(vm, el) {
+    vm._update(vm._render());
   }
 
   // 保留数组的原型
@@ -478,6 +496,9 @@
           ops.render = render;
         }
       }
+      console.log(ops.render);
+      // 组件的挂载，将vm实例挂载到el上
+      mountComponent(vm);
 
       // script标签引用的vue.global.js 这个编译过程是在浏览器运行的
       // runtime 和 runtimeWithCompiler的区别就是多了一个compileToFunction步骤
@@ -522,6 +543,7 @@
     this._init(options);
   }
   initMixin(Vue); // 扩展了init方法
+  initLifeCycle(Vue);
 
   return Vue;
 
