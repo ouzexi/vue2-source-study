@@ -418,11 +418,97 @@
     }, {
       key: "update",
       value: function update() {
+        console.log('update...');
+        // 把当前的watcher暂存起来
+        queueWatcher(this);
+      }
+    }, {
+      key: "run",
+      value: function run() {
+        // 渲染时使用最新的vm来渲染
+        // 比如vm.name = 20; vm = name = 12; name多次赋值后，取的是最后一次
         this.get();
       }
     }]);
     return Watcher;
-  }();
+  }(); // 记录需要更新的watcher（视图/组件）
+  var queue = [];
+  // 记录当前视图是否已存在 去重
+  var has = {};
+  // 防抖
+  var pending = false;
+  function flushSchedulerQueue() {
+    var flushQueue = queue.slice(0);
+    console.log("🚀 ~ file: watcher.js:69 ~ flushSchedulerQueue ~ flushQueue:", flushQueue);
+    // 重置
+    queue = [];
+    has = {};
+    pending = false;
+    // 在执行的过程中可能还有新的watcher 重新放到queue中
+    flushQueue.forEach(function (q) {
+      return q.run();
+    });
+  }
+  function queueWatcher(watcher) {
+    var id = watcher.id;
+    if (!has[id]) {
+      queue.push(watcher);
+      has[id] = true;
+      // 批量执行更新 不管update执行多少次 最终只执行一轮刷新操作（是第一次开启的）
+      if (!pending) {
+        nextTick(flushSchedulerQueue);
+        pending = true;
+      }
+    }
+  }
+  var callbacks = [];
+  var waiting = false;
+  // 批量执行
+  function flushCallbacks() {
+    var cbs = callbacks.slice(0);
+    // 重置
+    waiting = false;
+    callbacks = [];
+    cbs.forEach(function (cb) {
+      return cb();
+    });
+  }
+
+  // nextTick采用优雅降级的方式
+  var timerFunc;
+  if (Promise) {
+    timerFunc = function timerFunc() {
+      Promise.resolve().then(flushCallbacks);
+    };
+  } else if (MutationObserver) {
+    // 传入的回调函数是异步执行的
+    var observer = new MutationObserver(flushCallbacks);
+    var textNode = document.createTextNode(1);
+    observer.observe(textNode, {
+      characterData: true
+    });
+    timerFunc = function timerFunc() {
+      // 元素变化会执行MutationObserver回调
+      textNode.textContent = 2;
+    };
+  } else if (setImmediate) {
+    timerFunc = function timerFunc() {
+      setImmediate(flushCallbacks);
+    };
+  } else {
+    timerFunc = function timerFunc() {
+      setTimeout(flushCallbacks);
+    };
+  }
+
+  // 批量执行，一般是用一个waiting变量控制，第一次触发开启一个异步事件，之后收集全部函数，同步代码执行完后，最后异步批量执行
+  function nextTick(cb) {
+    callbacks.push(cb);
+    if (!waiting) {
+      timerFunc();
+      waiting = true;
+    }
+  }
 
   // _h() _c() 传入实例 标签名 标签属性 子节点
   function createElementVNode(vm, tag, data) {
@@ -758,6 +844,7 @@
   }
   initMixin(Vue); // 扩展了init方法
   initLifeCycle(Vue);
+  Vue.prototype.$nextTick = nextTick;
 
   return Vue;
 

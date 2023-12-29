@@ -31,10 +31,19 @@
             } */
         });
 
-        setTimeout(() => {
+        /* setTimeout(() => {
             vm.name = 'ouzx'
             vm.age = 24
-        }, 2000)
+            vm.age = 12
+            vm.age = 13
+            vm.age = 14
+        }, 2000) */
+
+        vm.age = 15;
+        console.log('before:', vm.$el.innerHTML)
+        vm.$nextTick(() => {
+            console.log('after:', vm.$el.innerHTML)
+        })
 
         // vm.$mount('#app'); // 也可以手动用$mount方法挂载，效果一样。
 
