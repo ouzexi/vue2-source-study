@@ -419,7 +419,8 @@
       key: "update",
       value: function update() {
         console.log('update...');
-        // 把当前的watcher暂存起来
+        // 当前视图多个属性多次改变时，update会触发多次
+        // 把当前的watcher暂存起来 实现批量刷新 这样update无论触发多少次 视图更新只调用一次
         queueWatcher(this);
       }
     }, {
@@ -433,13 +434,12 @@
     return Watcher;
   }(); // 记录需要更新的watcher（视图/组件）
   var queue = [];
-  // 记录当前视图是否已存在 去重
+  // 记录当前视图是否已存在于更新队列 去重
   var has = {};
   // 防抖
   var pending = false;
   function flushSchedulerQueue() {
     var flushQueue = queue.slice(0);
-    console.log("🚀 ~ file: watcher.js:69 ~ flushSchedulerQueue ~ flushQueue:", flushQueue);
     // 重置
     queue = [];
     has = {};
@@ -461,7 +461,10 @@
       }
     }
   }
+
+  // nextTick收集的回调函数队列
   var callbacks = [];
+  // 只在第一次触发nextTick开启 就能保证只开启一次异步操作 队列执行完后重置
   var waiting = false;
   // 批量执行
   function flushCallbacks() {
@@ -502,6 +505,7 @@
   }
 
   // 批量执行，一般是用一个waiting变量控制，第一次触发开启一个异步事件，之后收集全部函数，同步代码执行完后，最后异步批量执行
+  // 注意：nextTick不是异步的，他只是收集回调队列，开启异步执行队列
   function nextTick(cb) {
     callbacks.push(cb);
     if (!waiting) {
@@ -671,6 +675,9 @@
       if (inserted) {
         ob.observeArray(inserted);
       }
+
+      // 数组本身变化 通知对应的watcher更新视图
+      ob.dep.notify();
       return result;
     };
   });
@@ -679,6 +686,13 @@
     // Object.defineProperty只能劫持已经存在的属性（vue里面会为此单独写一些api $set $delete）
     function Observer(data) {
       _classCallCheck(this, Observer);
+      // 给每个对象（对象包括数组）增加收集功能 这样当实例的属性为数组/对象时，对应的数组/对象也会收集依赖
+      // 比如vm.arr = [1, 2, 3]，此时vm.arr = [4, 5]会触发视图更新，但是vm.arr.push(6)不会触发更新
+      // 因为vm.arr对应的这个数组本身没有收集依赖，所以现在要加上dep收集依赖，在调用7个变异方法后调用notify通知视图更新
+      // 同样地，vm.obj = {a: 1} -> vm.obj.b = 2 obj对应的对象本身也需要收集依赖，但是新增b属性时不会触发更新
+      // 因为没有调用notify通知更新，可以使用$set更新
+      this.dep = new Dep();
+
       // 需要给对象添加一个__ob__属性，赋值为this，有2个作用
       // 1、数组对新增的数据再次进行劫持，需要调用this的observeArray方法
       // 2、如果一个对象存在Observer类型的__ob__属性，说明被劫持过了，就不需要再被劫持了
@@ -716,10 +730,20 @@
       }
     }]);
     return Observer;
-  }();
+  }(); // 对象的属性或数组的项也可能是对象/数组，深层次嵌套递归使对象/数组本身收集依赖，使其改变时可以调用notify更新视图
+  function dependArray(value) {
+    for (var i = 0; i < value.length; i++) {
+      var current = value[i];
+      console.log("🚀 ~ file: index.js:50 ~ dependArray ~ current:", current);
+      current.__ob__ && current.__ob__.dep.depend();
+      if (Array.isArray(current)) {
+        dependArray(current);
+      }
+    }
+  }
   function defineReactive(target, key, value) {
     // 属性的属性也可能是对象，需要递归劫持
-    observe(value);
+    var childOb = observe(value);
     // 这里的value相当于全局的闭包，let value = null
 
     // 每个属性都有一个Dep对象
@@ -730,13 +754,22 @@
           // 让这个属性的收集器dep记住当前的watcher
           // 同时当前的watcher会记住这个属性的收集器
           dep.depend();
+          // 同样地，属性的属性如果是对象/数组的话，本身也要实现依赖收集
+          if (childOb) {
+            console.log("🚀 ~ file: index.js:63 ~ get ~ value:", value);
+            debugger;
+            childOb.dep.depend();
+            if (Array.isArray(value)) {
+              dependArray(value);
+            }
+          }
         }
         return value;
       },
       set: function set(newVal) {
+        if (newVal === value) return;
         // 如果设置的新值是对象的话，也要进行劫持后再赋值
         observe(newVal);
-        if (newVal === value) return;
         value = newVal;
 
         // 属性变化，通知视图更新

@@ -10,7 +10,7 @@
         <div style="color: red;background: green" key='123'>
             {{ name }} hello {{ age }} {{ name }} hello
         </div>
-        <li>world</li>
+        <li>{{ arr }}</li>
     </div>
     <script src="vue.js"></script>
     <script>
@@ -22,7 +22,8 @@
                     '武侯区': 4401,
                     '高要区': 4402
                 },
-                hobby: ['eat', 'dance', {a: 1}]
+                hobby: ['eat', 'dance', {a: 1}, ['a']],
+                arr: [1, 2, 3, {a: 1}, ['a', 'b', []]]
             },
             el: '#app', // 我们要将数据 解析到el元素上
             // template: `<div>hello</div>`
@@ -31,19 +32,9 @@
             } */
         });
 
-        /* setTimeout(() => {
-            vm.name = 'ouzx'
-            vm.age = 24
-            vm.age = 12
-            vm.age = 13
-            vm.age = 14
-        }, 2000) */
-
-        vm.age = 15;
-        console.log('before:', vm.$el.innerHTML)
-        vm.$nextTick(() => {
-            console.log('after:', vm.$el.innerHTML)
-        })
+        setTimeout(() => {
+            vm.arr[4][2].push('c')
+        }, 2000)
 
         // vm.$mount('#app'); // 也可以手动用$mount方法挂载，效果一样。
 

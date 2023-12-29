@@ -34,6 +34,9 @@ methods.forEach(method => {
             ob.observeArray(inserted);
         }
 
+        // 数组本身变化 通知对应的watcher更新视图
+        ob.dep.notify();
+
         return result;
     }
 })
