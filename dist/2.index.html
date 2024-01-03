@@ -8,16 +8,13 @@
 <body>
     <div id="app" style="background: yellow;">
         <div style="color: red;background: green" key='123'>
-            {{ fullName }}
+            {{ firstName }}
         </div>
     </div>
     <script src="vue.js"></script>
     <script>
         const vm = new Vue({
             data: {
-                name: 'zf',
-                age: 20,
-                arr: [1, 2, 3, {a: 1}, ['a', 'b', []]],
                 firstName: '朱',
                 lastName: '峰'
             },
@@ -26,15 +23,25 @@
                     return this.firstName + this.lastName;
                 }
             },
+            watch: {
+                firstName(newVal, oldVal) {
+                    console.log("🚀 ~ file: 2.index.html:28 ~ fullName ~ oldVal:", oldVal)
+                    console.log("🚀 ~ file: 2.index.html:28 ~ fullName ~ newVal:", newVal)
+                }
+            },
+            // 底层就算你写的是上面的方式 也会被转化成$watch的写法
+            // vm.$watch(function exprOrFn(){return vm.fullname},function cb(newValue,oldValue){
+            //     console.log(newValue,oldValue,'11')
+            // })
             el: '#app', // 我们要将数据 解析到el元素上
             // template: `<div>hello</div>`
             /* render() {
                 return h('div', {}, 'test')
             } */
         });
+
         setTimeout(() => {
-            // vm.arr[4][2].push('c')
-            vm.firstName = '够'
+            vm.firstName = 'xxx'
         }, 2000)
 
         // vm.$mount('#app'); // 也可以手动用$mount方法挂载，效果一样。

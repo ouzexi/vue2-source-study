@@ -10,6 +10,9 @@ export function initState(vm) {
     if(opts.computed) {
         initComputed(vm);
     }
+    if(opts.watch) {
+        initWatch(vm);
+    }
 }
 
 
@@ -25,7 +28,6 @@ function proxy(vm, target, key) {
 }
 
 function initData(vm) {
-    debugger
     let data = vm.$options.data;
     // data可能是函数或者对象
     data = typeof data === 'function' ? data.call(vm) : data;
@@ -84,4 +86,28 @@ function createComputedGetter(key) {
         }
         return watcher.value;
     }
+}
+
+function initWatch(vm) {
+    const watch = vm.$options.watch;
+    for(let key in watch) {
+        // 可能是字符串 数组 函数
+        const handler = watch[key];
+        if(Array.isArray(handler)) {
+            for(let i = 0; i < handler.length; i++) {
+                createWatcher(vm, key, handler[i]);
+            }
+        } else {
+            createWatcher(vm, key, handler);
+        }
+    }
+}
+
+function createWatcher(vm, key, handler) {
+    // 字符串 或 函数
+    if(typeof handler === 'string') {
+        // 从methods中获取
+        handler = vm[handler];
+    }
+    return vm.$watch(key, handler);
 }

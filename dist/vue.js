@@ -388,13 +388,22 @@
 
   var id = 0;
   var Watcher = /*#__PURE__*/function () {
-    function Watcher(vm, fn, options) {
+    function Watcher(vm, exprOrFn, options, cb) {
       _classCallCheck(this, Watcher);
       this.id = id++;
       // 表示是一个渲染watcher
       this.renderWatcher = options;
-      // 表示调用这个函数可以发生取值操作
-      this.getter = fn;
+
+      // getter表示调用这个函数可以发生取值操作
+      // watch可以传入字符串 取methods中的函数
+      if (typeof exprOrFn === 'string') {
+        this.getter = function () {
+          return vm[exprOrFn];
+        };
+      } else {
+        this.getter = exprOrFn;
+      }
+
       // 实现计算属性和进行一些清理工作需要用到
       this.deps = [];
       // 每个属性的dep对应一个depId，避免重复收集
@@ -403,6 +412,8 @@
       // 计算属性watcher传入的缓存标记
       this.lazy = options.lazy;
       this.dirty = this.lazy;
+      this.cb = cb;
+      this.user = options.user;
       // 如果是计算属性watcher 创建实例时不会自动触发
       this.value = this.lazy ? undefined : this.get();
     }
@@ -455,11 +466,9 @@
       value: function update() {
         console.log('update...', this);
         if (this.lazy) {
-          console.log('我是计算');
           // 如果是计算属性watcher 依赖的值变化 就标识计算属性为脏值
           this.dirty = true;
         } else {
-          console.log('我是渲染');
           // 当前视图多个属性多次改变时，update会触发多次
           // 把当前的watcher暂存起来 实现批量刷新 这样update无论触发多少次 视图更新只调用一次
           queueWatcher(this);
@@ -468,9 +477,15 @@
     }, {
       key: "run",
       value: function run() {
+        // 保存上一次的旧值 给watch使用
+        var oldValue = this.value;
         // 渲染时使用最新的vm来渲染
         // 比如vm.name = 20; vm = name = 12; name多次赋值后，取的是最后一次
-        this.get();
+        var newValue = this.get();
+        // 如果是watch的watcher触发 则调用回调
+        if (this.user) {
+          this.cb.call(this.vm, newValue, oldValue);
+        }
       }
     }]);
     return Watcher;
@@ -837,6 +852,9 @@
     if (opts.computed) {
       initComputed(vm);
     }
+    if (opts.watch) {
+      initWatch(vm);
+    }
   }
   function proxy(vm, target, key) {
     Object.defineProperty(vm, key, {
@@ -849,7 +867,6 @@
     });
   }
   function initData(vm) {
-    debugger;
     var data = vm.$options.data;
     // data可能是函数或者对象
     data = typeof data === 'function' ? data.call(vm) : data;
@@ -909,6 +926,28 @@
       return watcher.value;
     };
   }
+  function initWatch(vm) {
+    var watch = vm.$options.watch;
+    for (var key in watch) {
+      // 可能是字符串 数组 函数
+      var handler = watch[key];
+      if (Array.isArray(handler)) {
+        for (var i = 0; i < handler.length; i++) {
+          createWatcher(vm, key, handler[i]);
+        }
+      } else {
+        createWatcher(vm, key, handler);
+      }
+    }
+  }
+  function createWatcher(vm, key, handler) {
+    // 字符串 或 函数
+    if (typeof handler === 'string') {
+      // 从methods中获取
+      handler = vm[handler];
+    }
+    return vm.$watch(key, handler);
+  }
 
   function initMixin(Vue) {
     // 给Vue增加init方法
@@ -964,9 +1003,20 @@
   function Vue(options) {
     this._init(options);
   }
-  initMixin(Vue); // 扩展了init方法
+
+  // 扩展了init方法
+  initMixin(Vue);
   initLifeCycle(Vue);
   Vue.prototype.$nextTick = nextTick;
+
+  // watch多种形式最终都是调用这个方法
+  Vue.prototype.$watch = function (exprOrFn, cb) {
+    // firstname / () => vm.firstname
+    // firstname的值变化了 直接执行cb函数即可
+    new Watcher(this, exprOrFn, {
+      user: true
+    }, cb);
+  };
 
   return Vue;
 

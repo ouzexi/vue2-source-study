@@ -10,12 +10,19 @@ import Dep, { popTarget, pushTarget } from "./dep";
 
 let id = 0;
 class Watcher {
-    constructor(vm, fn, options) {
+    constructor(vm, exprOrFn, options, cb) {
         this.id = id++;
         // 表示是一个渲染watcher
         this.renderWatcher = options;
-        // 表示调用这个函数可以发生取值操作
-        this.getter = fn;
+
+        // getter表示调用这个函数可以发生取值操作
+        // watch可以传入字符串 取methods中的函数
+        if(typeof exprOrFn === 'string') {
+            this.getter = function() { return vm[exprOrFn]; }
+        } else {
+            this.getter = exprOrFn;
+        }
+
         // 实现计算属性和进行一些清理工作需要用到
         this.deps = [];
         // 每个属性的dep对应一个depId，避免重复收集
@@ -24,6 +31,8 @@ class Watcher {
         // 计算属性watcher传入的缓存标记
         this.lazy = options.lazy;
         this.dirty = this.lazy;
+        this.cb = cb;
+        this.user = options.user;
         // 如果是计算属性watcher 创建实例时不会自动触发
         this.value = this.lazy ? undefined : this.get();
     }
@@ -79,9 +88,15 @@ class Watcher {
     }
 
     run() {
+        // 保存上一次的旧值 给watch使用
+        let oldValue = this.value;
         // 渲染时使用最新的vm来渲染
         // 比如vm.name = 20; vm = name = 12; name多次赋值后，取的是最后一次
-        this.get();
+        let newValue = this.get();
+        // 如果是watch的watcher触发 则调用回调
+        if(this.user) {
+            this.cb.call(this.vm, newValue, oldValue);
+        }
     }
 }
 
