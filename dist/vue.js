@@ -369,6 +369,16 @@
     return Dep;
   }();
   Dep.target = null;
+  // 用一个栈维护多个watcher（包括计算属性watcher、渲染watcher）
+  var stack = [];
+  function pushTarget(watcher) {
+    stack.push(watcher);
+    Dep.target = watcher;
+  }
+  function popTarget() {
+    stack.pop();
+    Dep.target = stack[stack.length - 1];
+  }
 
   /* 
       1）当创建渲染watcher时会把当前渲染的watcher对象赋值到Dep.target上
@@ -389,7 +399,12 @@
       this.deps = [];
       // 每个属性的dep对应一个depId，避免重复收集
       this.depsId = new Set();
-      this.get();
+      this.vm = vm;
+      // 计算属性watcher传入的缓存标记
+      this.lazy = options.lazy;
+      this.dirty = this.lazy;
+      // 如果是计算属性watcher 创建实例时不会自动触发
+      this.value = this.lazy ? undefined : this.get();
     }
     _createClass(Watcher, [{
       key: "addDep",
@@ -403,25 +418,52 @@
           dep.addSub(this);
         }
       }
+
+      // 计算属性执行getter得到计算属性的值
+    }, {
+      key: "evaluate",
+      value: function evaluate() {
+        // 获取到getter的返回值 同时标识数据不脏了
+        this.value = this.get();
+        this.dirty = false;
+      }
     }, {
       key: "get",
       value: function get() {
         // 将收集器的目标设置为当前视图
-        Dep.target = this;
+        pushTarget(this);
         // 调用getter即vm._update(vm._render)会调用render方法生成虚拟dom
         // render方法会在vm上取值如vm.name vm.age
         // 此时触发属性的dep收集依赖
-        this.getter();
+        var value = this.getter.call(this.vm);
         // render渲染完毕后重置
-        Dep.target = null;
+        popTarget();
+        return value;
+      }
+
+      // 让计算属性watcher中deps中的每个依赖属性dep去收集当前计算属性所在的渲染watcher
+    }, {
+      key: "depend",
+      value: function depend() {
+        var i = this.deps.length;
+        while (i--) {
+          this.deps[i].depend();
+        }
       }
     }, {
       key: "update",
       value: function update() {
-        console.log('update...');
-        // 当前视图多个属性多次改变时，update会触发多次
-        // 把当前的watcher暂存起来 实现批量刷新 这样update无论触发多少次 视图更新只调用一次
-        queueWatcher(this);
+        console.log('update...', this);
+        if (this.lazy) {
+          console.log('我是计算');
+          // 如果是计算属性watcher 依赖的值变化 就标识计算属性为脏值
+          this.dirty = true;
+        } else {
+          console.log('我是渲染');
+          // 当前视图多个属性多次改变时，update会触发多次
+          // 把当前的watcher暂存起来 实现批量刷新 这样update无论触发多少次 视图更新只调用一次
+          queueWatcher(this);
+        }
       }
     }, {
       key: "run",
@@ -734,7 +776,6 @@
   function dependArray(value) {
     for (var i = 0; i < value.length; i++) {
       var current = value[i];
-      console.log("🚀 ~ file: index.js:50 ~ dependArray ~ current:", current);
       current.__ob__ && current.__ob__.dep.depend();
       if (Array.isArray(current)) {
         dependArray(current);
@@ -756,8 +797,6 @@
           dep.depend();
           // 同样地，属性的属性如果是对象/数组的话，本身也要实现依赖收集
           if (childOb) {
-            console.log("🚀 ~ file: index.js:63 ~ get ~ value:", value);
-            debugger;
             childOb.dep.depend();
             if (Array.isArray(value)) {
               dependArray(value);
@@ -788,6 +827,87 @@
       return data.__ob__;
     }
     return new Observer(data);
+  }
+
+  function initState(vm) {
+    var opts = vm.$options; // 获取所有的选项
+    if (opts.data) {
+      initData(vm);
+    }
+    if (opts.computed) {
+      initComputed(vm);
+    }
+  }
+  function proxy(vm, target, key) {
+    Object.defineProperty(vm, key, {
+      get: function get() {
+        return vm[target][key];
+      },
+      set: function set(newValue) {
+        vm[target][key] = newValue;
+      }
+    });
+  }
+  function initData(vm) {
+    debugger;
+    var data = vm.$options.data;
+    // data可能是函数或者对象
+    data = typeof data === 'function' ? data.call(vm) : data;
+
+    // 将返回的对象放到了vue实例的_data属性上
+    vm._data = data;
+    // 对数据进行劫持，vue采用了defineProperty
+    observe(data);
+
+    // 将vm._data用vm代理就无须通过vm._data.xxx获取，而是vm.xxx直接获取
+    for (var key in data) {
+      proxy(vm, '_data', key);
+    }
+  }
+  function initComputed(vm) {
+    var computed = vm.$options.computed;
+    // 将计算属性watcher保存到vm上
+    var watchers = vm._computedWatchers = {};
+    for (var key in computed) {
+      var userDef = computed[key];
+      // 获取计算属性中get
+      var fn = typeof userDef === 'function' ? userDef : userDef.get;
+
+      // 每个计算属性创建一个计算属性watcher lasy: true表示默认不会执行计算属性的get方法（有缓存功能）
+      watchers[key] = new Watcher(vm, fn, {
+        lazy: true
+      });
+      defineComputed(vm, key, userDef);
+    }
+  }
+  function defineComputed(target, key, userDef) {
+    var setter = userDef.set || function () {};
+    // 通过实例获取对应的属性
+    Object.defineProperty(target, key, {
+      get: createComputedGetter(key),
+      set: setter
+    });
+  }
+
+  // 计算属性不会收集依赖，只会让自己的依赖属性去收集依赖（即计算属性watcher中的deps中的每个dep会depend这个计算属性所在的渲染watcher）
+  function createComputedGetter(key) {
+    // 判断是否需要执行getter
+    return function () {
+      // 获取该计算属性对应的watcher
+      var watcher = this._computedWatchers[key];
+      if (watcher.dirty) {
+        // 如果是脏的就执行
+        // 执行后dirty不脏了，下次就不会执行
+        watcher.evaluate();
+      }
+      // 计算属性执行后出栈 此时Dep.target为渲染watcher 需要让计算属性中所依赖的属性也去收集该渲染watcher
+      // 否则依赖的属性的subs中没有渲染watcher，修改它们时不会更新视图
+      // 如fullName = firstName + lastName 这时firstName和lastName属于fullName计算属性watcher中的deps中收集的dep，他们2个会收集渲染watcher
+      if (Dep.target) {
+        watcher.depend();
+      }
+      return watcher.value;
+    };
   }
 
   function initMixin(Vue) {
@@ -838,37 +958,6 @@
       // 所以runtime是不包含模板编译的 整个编译是打包通过vue-loader转义.vue文件
       // 所以使用vue.runtime.js不能编译选项的template属性
     };
-  }
-  function initState(vm) {
-    var opts = vm.$options; // 获取所有的选项
-    if (opts.data) {
-      initData(vm);
-    }
-  }
-  function proxy(vm, target, key) {
-    Object.defineProperty(vm, key, {
-      get: function get() {
-        return vm[target][key];
-      },
-      set: function set(newValue) {
-        vm[target][key] = newValue;
-      }
-    });
-  }
-  function initData(vm) {
-    var data = vm.$options.data;
-    // data可能是函数或者对象
-    data = typeof data === 'function' ? data.call(vm) : data;
-
-    // 将返回的对象放到了vue实例的_data属性上
-    vm._data = data;
-    // 对数据进行劫持，vue采用了defineProperty
-    observe(data);
-
-    // 将vm._data用vm代理就无须通过vm._data.xxx获取，而是vm.xxx直接获取
-    for (var key in data) {
-      proxy(vm, '_data', key);
-    }
   }
 
   // Vue构造函数

@@ -1,6 +1,6 @@
 // 一个视图（组件）对应一个watcher
 
-import Dep from "./dep";
+import Dep, { popTarget, pushTarget } from "./dep";
 
 /* 
     1）当创建渲染watcher时会把当前渲染的watcher对象赋值到Dep.target上
@@ -20,7 +20,12 @@ class Watcher {
         this.deps = [];
         // 每个属性的dep对应一个depId，避免重复收集
         this.depsId = new Set();
-        this.get();
+        this.vm = vm;
+        // 计算属性watcher传入的缓存标记
+        this.lazy = options.lazy;
+        this.dirty = this.lazy;
+        // 如果是计算属性watcher 创建实例时不会自动触发
+        this.value = this.lazy ? undefined : this.get();
     }
 
     addDep(dep) {
@@ -34,22 +39,43 @@ class Watcher {
         }
     }
 
+    // 计算属性执行getter得到计算属性的值
+    evaluate() {
+        // 获取到getter的返回值 同时标识数据不脏了
+        this.value = this.get();
+        this.dirty = false;
+    }
+
     get() {
         // 将收集器的目标设置为当前视图
-        Dep.target = this;
+        pushTarget(this);
         // 调用getter即vm._update(vm._render)会调用render方法生成虚拟dom
         // render方法会在vm上取值如vm.name vm.age
         // 此时触发属性的dep收集依赖
-        this.getter();
+        let value = this.getter.call(this.vm);
         // render渲染完毕后重置
-        Dep.target = null;
+        popTarget();
+        return value;
+    }
+
+    // 让计算属性watcher中deps中的每个依赖属性dep去收集当前计算属性所在的渲染watcher
+    depend() {
+        let i = this.deps.length;
+        while(i--) {
+            this.deps[i].depend();
+        }
     }
 
     update() {
-        console.log('update...')
-        // 当前视图多个属性多次改变时，update会触发多次
-        // 把当前的watcher暂存起来 实现批量刷新 这样update无论触发多少次 视图更新只调用一次
-        queueWatcher(this);
+        console.log('update...', this)
+        if(this.lazy) {
+            // 如果是计算属性watcher 依赖的值变化 就标识计算属性为脏值
+            this.dirty = true;
+        } else {
+            // 当前视图多个属性多次改变时，update会触发多次
+            // 把当前的watcher暂存起来 实现批量刷新 这样update无论触发多少次 视图更新只调用一次
+            queueWatcher(this);
+        }
     }
 
     run() {

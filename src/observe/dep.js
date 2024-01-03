@@ -29,5 +29,17 @@ class Dep {
 }
 
 Dep.target = null;
+// 用一个栈维护多个watcher（包括计算属性watcher、渲染watcher）
+let stack = [];
+
+export function pushTarget(watcher) {
+    stack.push(watcher);
+    Dep.target = watcher;
+}
+
+export function popTarget() {
+    stack.pop();
+    Dep.target = stack[stack.length - 1];
+}
 
 export default Dep;
