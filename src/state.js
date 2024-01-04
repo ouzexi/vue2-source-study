@@ -1,6 +1,6 @@
 import Dep from './observe/dep.js';
 import { observe } from './observe/index'
-import Watcher from './observe/watcher.js';
+import Watcher, { nextTick } from './observe/watcher.js';
 
 export function initState(vm) {
     const opts = vm.$options; // 获取所有的选项
@@ -110,4 +110,15 @@ function createWatcher(vm, key, handler) {
         handler = vm[handler];
     }
     return vm.$watch(key, handler);
+}
+
+export function initStateMixin(Vue) {
+    Vue.prototype.$nextTick = nextTick;
+
+    // watch多种形式最终都是调用这个方法
+    Vue.prototype.$watch = function(exprOrFn, cb) {
+        // firstname / () => vm.firstname
+        // firstname的值变化了 直接执行cb函数即可
+        new Watcher(this, exprOrFn, { user: true }, cb);
+    } 
 }

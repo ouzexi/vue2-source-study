@@ -1,56 +1,6 @@
 import Watcher from "./observe/watcher";
 import { createElementVNode, createTextVNode } from "./vdom/index";
-
-function patchProps(el, props) {
-    for(let key in props) {
-        if(key === 'style') {
-            for(let styleName in props['style']) {
-                el.style[styleName] = props['style'][styleName];
-            }
-        } else {
-            el.setAttribute(key, props[key]);
-        }
-    }
-}
-
-function createElm(vnode) {
-    let { tag, data, children, text } = vnode;
-    // 标签元素
-    if(typeof tag === 'string') {
-        // vnode增加el属性，将虚拟dom和真实dom对应起来，方便后续修改props属性
-        vnode.el = document.createElement(tag);
-        patchProps(vnode.el, data);
-        children.forEach(child => {
-            const childElm = createElm(child);
-            vnode.el.appendChild(childElm);
-        })
-    } else {
-        vnode.el = document.createTextNode(text);
-    }
-    return vnode.el;
-}
-
-// 初始化的时候，oldVNode是真实dom 更新时是上一次虚拟DOM
-function patch(oldVNode, vnode) {
-    // nodeType是dom元素原生属性
-    const isRealElement = oldVNode.nodeType;
-    if(isRealElement) {
-        // 获取真实dom
-        const elm = oldVNode;
-        // 获取父元素
-        const parentElm = elm.parentNode;
-        // 根据虚拟dom创建真实dom
-        let newElm = createElm(vnode);
-        // 插入到原节点的相邻节点
-        parentElm.insertBefore(newElm, elm.nextSibling);
-        // 移除原节点
-        parentElm.removeChild(elm);
-
-        return newElm;
-    } else {
-        // diff算法
-    }
-}
+import { patch } from "./vdom/patch";
 
 export function initLifeCycle(Vue) {
     Vue.prototype._update = function(vnode) {

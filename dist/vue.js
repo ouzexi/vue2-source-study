@@ -599,15 +599,36 @@
       text: text
     };
   }
+  function isSameVNode(vnode1, vnode2) {
+    return vnode1.tag === vnode2.tag && vnode1.key === vnode2.key;
+  }
 
-  function patchProps(el, props) {
-    for (var key in props) {
-      if (key === 'style') {
+  function patchProps(el) {
+    var oldProps = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+    var props = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+    // 某个属性 老节点中有 新节点中没有 要删除老的
+    var oldStyles = oldProps.style || {};
+    var newStyles = props.style || {};
+    // 老节点样式中有 新的没有 要把样式去掉
+    for (var key in oldStyles) {
+      if (!newStyles[key]) {
+        el.style[key] = '';
+      }
+    }
+
+    // 比较其他新老属性
+    for (var _key in oldProps) {
+      if (!props[_key]) {
+        el.removeAttribute(_key);
+      }
+    }
+    for (var _key2 in props) {
+      if (_key2 === 'style') {
         for (var styleName in props['style']) {
           el.style[styleName] = props['style'][styleName];
         }
       } else {
-        el.setAttribute(key, props[key]);
+        el.setAttribute(_key2, props[_key2]);
       }
     }
   }
@@ -620,7 +641,7 @@
     if (typeof tag === 'string') {
       // vnode增加el属性，将虚拟dom和真实dom对应起来，方便后续修改props属性
       vnode.el = document.createElement(tag);
-      patchProps(vnode.el, data);
+      patchProps(vnode.el, {}, data);
       children.forEach(function (child) {
         var childElm = createElm(child);
         vnode.el.appendChild(childElm);
@@ -647,8 +668,72 @@
       // 移除原节点
       parentElm.removeChild(elm);
       return newElm;
+    } else {
+      // diff算法（平级比较）
+      // 1、两个节点不是同一个节点 直接删除老的换上新的 （无需对比）
+      // 2、两个节点是同一个节点（判断tag和key） 比较两个节点的属性是否有差异（复用老的节点，将差异的属性更新）
+      // 3、节点比较完毕后需要比较两个节点的子节点
+      return patchVnode(oldVNode, vnode);
     }
   }
+  function patchVnode(oldVNode, vnode) {
+    if (!isSameVNode(oldVNode, vnode)) {
+      // 新的替换老的
+      var _el = createElm(vnode);
+      oldVNode.el.parentNode.replaceChild(_el, oldVNode.el);
+      return _el;
+    }
+    // 文本的情况(文本的tag和key都为undefined) 比较文本的内容
+    // 复用老节点的元素 无需新创建dom
+    var el = vnode.el = oldVNode.el;
+    // 都是文本
+    if (!oldVNode.tag) {
+      if (oldVNode.text !== vnode.text) {
+        // 用新的文本覆盖老的文本
+        el.textContent = vnode.text;
+      }
+    }
+    // 都是文本 比对标签的属性
+    patchProps(el, oldVNode.data, vnode.data);
+
+    // 比较儿子节点 需要考虑 一方有儿子&一方没儿子 或 两方都有儿子
+    var oldChildren = oldVNode.children || [];
+    var newChildren = vnode.children || [];
+
+    // 两方都有儿子
+    if (oldChildren.length > 0 && newChildren.length > 0) {
+      updateChildren(el, oldChildren, newChildren);
+    }
+    // 老节点没有儿子 新节点有 直接插入儿子
+    else if (newChildren.length > 0) {
+      mountChildren(el, newChildren);
+    }
+    // 新节点没有儿子 老节点有 直接删除儿子
+    else if (oldChildren.length > 0) {
+      // 可以循环 removeChild
+      el.innerHTML = '';
+    }
+    return el;
+  }
+  function mountChildren(el, newChildren) {
+    for (var i = 0; i < newChildren.length; i++) {
+      var child = newChildren[i];
+      el.appendChild(createElm(child));
+    }
+  }
+  function updateChildren(el, oldChildren, newChildren) {
+    // 双指针比较两个节点 新头-旧头 新尾-旧尾 当头指针超过尾指针时结束
+    var oldStartIndex = 0;
+    var newStartIndex = 0;
+    var oldEndIndex = oldChildren.length - 1;
+    var newEndIndex = newChildren.length - 1;
+    var oldStartVnode = oldChildren[oldStartIndex];
+    var newStartVnode = newChildren[newStartIndex];
+    var oldEndVnode = oldChildren[oldEndIndex];
+    var newEndVnode = newChildren[newEndIndex];
+    console.log(oldStartVnode, newStartVnode, oldEndVnode, newEndVnode);
+  }
+
   function initLifeCycle(Vue) {
     Vue.prototype._update = function (vnode) {
       var vm = this;
@@ -948,6 +1033,18 @@
     }
     return vm.$watch(key, handler);
   }
+  function initStateMixin(Vue) {
+    Vue.prototype.$nextTick = nextTick;
+
+    // watch多种形式最终都是调用这个方法
+    Vue.prototype.$watch = function (exprOrFn, cb) {
+      // firstname / () => vm.firstname
+      // firstname的值变化了 直接执行cb函数即可
+      new Watcher(this, exprOrFn, {
+        user: true
+      }, cb);
+    };
+  }
 
   function initMixin(Vue) {
     // 给Vue增加init方法
@@ -1007,16 +1104,29 @@
   // 扩展了init方法
   initMixin(Vue);
   initLifeCycle(Vue);
-  Vue.prototype.$nextTick = nextTick;
+  // 实现nextTick $watch
+  initStateMixin(Vue);
 
-  // watch多种形式最终都是调用这个方法
-  Vue.prototype.$watch = function (exprOrFn, cb) {
-    // firstname / () => vm.firstname
-    // firstname的值变化了 直接执行cb函数即可
-    new Watcher(this, exprOrFn, {
-      user: true
-    }, cb);
-  };
+  // ------------测试虚拟节点diff算法---------------
+  var render1 = compileToFunction("<ul  a=\"1\" style=\"color:blue\">\n    <li key=\"a\">a</li>\n    <li key=\"b\">b</li>\n    <li key=\"c\">c</li>\n    <li key=\"d\">d</li>\n</ul>");
+  var vm1 = new Vue({
+    data: {
+      name: 'zf'
+    }
+  });
+  var prevVnode = render1.call(vm1);
+  var el = createElm(prevVnode);
+  document.body.appendChild(el);
+  var render2 = compileToFunction("<ul  a=\"1\"  style=\"color:red;\">\n    <li key=\"a\">a</li>\n    <li key=\"b\">b</li>\n    <li key=\"c\">c</li>\n</ul>");
+  var vm2 = new Vue({
+    data: {
+      name: 'zf'
+    }
+  });
+  var nextVnode = render2.call(vm2);
+  setTimeout(function () {
+    patch(prevVnode, nextVnode);
+  }, 1000);
 
   return Vue;
 
