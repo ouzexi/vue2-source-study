@@ -693,7 +693,7 @@
         el.textContent = vnode.text;
       }
     }
-    // 都是文本 比对标签的属性
+    // 比对标签的属性
     patchProps(el, oldVNode.data, vnode.data);
 
     // 比较儿子节点 需要考虑 一方有儿子&一方没儿子 或 两方都有儿子
@@ -731,7 +731,96 @@
     var newStartVnode = newChildren[newStartIndex];
     var oldEndVnode = oldChildren[oldEndIndex];
     var newEndVnode = newChildren[newEndIndex];
-    console.log(oldStartVnode, newStartVnode, oldEndVnode, newEndVnode);
+
+    // 将老节点的子节点做映射表
+    function makeIndexByKey(children) {
+      var map = {};
+      children.forEach(function (child, index) {
+        map[child.key] = index;
+      });
+      return map;
+    }
+    var map = makeIndexByKey(oldChildren);
+
+    // 思考 循环为什么要加key
+    // 新老节点双方有一方头指针大于尾指针则停止循环
+    while (oldStartIndex <= oldEndIndex && newStartIndex <= newEndIndex) {
+      // 因为可能被标记过 设置为undefined 需要跳过
+      if (!oldStartVnode) {
+        oldStartVnode = oldChildren[++oldStartIndex];
+      }
+      // 因为可能被标记过 
+      else if (!oldEndVnode) {
+        oldEndVnode = oldChildren[--oldEndIndex];
+      }
+      // 头头比对
+      else if (isSameVNode(oldStartVnode, newStartVnode)) {
+        patchVnode(oldStartVnode, newStartVnode);
+        oldStartVnode = oldChildren[++oldStartIndex];
+        newStartVnode = newChildren[++newStartIndex];
+      }
+      // 尾尾比对
+      else if (isSameVNode(oldEndVnode, newEndVnode)) {
+        patchVnode(oldEndVnode, newEndVnode);
+        oldEndVnode = oldChildren[--oldEndIndex];
+        newEndVnode = newChildren[--newEndIndex];
+      }
+      // 尾头比对
+      else if (isSameVNode(oldEndVnode, newStartVnode)) {
+        patchVnode(oldEndVnode, newStartVnode);
+        // 新的头节点 与 老的尾节点 相同，复用老节点 移到头部 
+        el.insertBefore(oldEndVnode.el, oldStartVnode.el);
+        oldEndVnode = oldChildren[--oldEndIndex];
+        newStartVnode = newChildren[++newStartIndex];
+      }
+      // 头尾比对
+      else if (isSameVNode(oldStartVnode, newEndVnode)) {
+        patchVnode(oldStartVnode, newEndVnode);
+        // 新的尾节点 与 老的头节点 相同，复用老节点 移到尾部
+        el.insertBefore(oldStartVnode.el, oldEndVnode.el.nextSibling);
+      }
+      // 乱序比对
+      // 在给动态列表添加key的时候 要尽量避免使用索引 因为索引前后都是从0开始 会发生错误复用
+      // 根据老的节点列表做一个映射关系 用新节点去遍历寻找 若找到则移动至头部（因为新节点从头部遍历） 找不到则添加 最后多余的老节点则删除
+      else {
+        var moveIndex = map[newStartVnode.key];
+        // 在老节点映射表中找到对应虚拟节点 则复用
+        if (moveIndex !== undefined) {
+          var moveVnode = oldChildren[moveIndex];
+          el.insertBefore(moveVnode.el, oldStartVnode.el);
+          // 表示该节点已做移动处理 不能再比较复用
+          oldChildren[moveIndex] = undefined;
+          patchVnode(moveVnode, newStartVnode);
+        }
+        // 找不到则添加至头部
+        else {
+          el.insertBefore(createElm(newStartVnode), oldStartVnode.el);
+        }
+        // 当前新节点处理完毕 到下一个
+        newStartVnode = newChildren[++newStartIndex];
+      }
+    }
+    // 老节点列表遍历完毕 新节点列表还未遍历完毕 则把多余的新节点插入
+    if (newStartIndex <= newEndIndex) {
+      for (var i = newStartIndex; i <= newEndIndex; i++) {
+        var childEl = createElm(newChildren[i]);
+        // 这里可能向后追加 也可能是向前追加（尾尾比对的情况）
+        // 判断方法是 新节点列表end下标后是否有下一个节点 有则头插 无则尾插 
+        // 所以使用insertBefore代替appendChild 它第二个参数为null时相当于appendChild
+        var anchor = newChildren[newEndIndex + 1] ? newChildren[newEndIndex + 1].el : null;
+        el.insertBefore(childEl, anchor);
+      }
+    }
+    // 新节点列表遍历完毕 老节点列表还未遍历完毕 则把多余的老节点删除
+    if (oldStartIndex <= oldEndIndex) {
+      for (var _i = oldStartIndex; _i <= oldEndIndex; _i++) {
+        // 未被做移动处理的老节点才删除
+        if (oldChildren[_i]) {
+          var _childEl = oldChildren[_i].el;
+          el.removeChild(_childEl);
+        }
+      }
+    }
   }
 
   function initLifeCycle(Vue) {
@@ -1117,7 +1206,7 @@
   var prevVnode = render1.call(vm1);
   var el = createElm(prevVnode);
   document.body.appendChild(el);
-  var render2 = compileToFunction("<ul  a=\"1\"  style=\"color:red;\">\n    <li key=\"a\">a</li>\n    <li key=\"b\">b</li>\n    <li key=\"c\">c</li>\n</ul>");
+  var render2 = compileToFunction("<ul  a=\"1\"  style=\"color:red;\">\n    <li key=\"b\">b</li>\n    <li key=\"m\">m</li>\n    <li key=\"a\">a</li>\n    <li key=\"p\">p</li>\n    <li key=\"c\">c</li>\n    <li key=\"q\">q</li>\n</ul>");
   var vm2 = new Vue({
     data: {
       name: 'zf'
