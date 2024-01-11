@@ -9,5 +9,22 @@
     <div id="app">
     </div>
     <script src="vue.js"></script>
+    <script>
+        Vue.mixin({
+            created() {
+                console.log('created...mixin1')
+            }
+        });
+        Vue.mixin({
+            created() {
+                console.log('created...mixin2')
+            }
+        });
+        const vm = new Vue({
+            created() {
+                console.log('created...')
+            }
+        })
+    </script>
 </body>
 </html>

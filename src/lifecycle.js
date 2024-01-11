@@ -7,7 +7,7 @@ export function initLifeCycle(Vue) {
         const vm = this;
         const el = vm.$el;
         // patch既有初始化的功能 又有更新的功能
-        vm.$el = patch(el, vnode);
+        // vm.$el = patch(el, vnode);
     }
 
     // _c('div', {}, ...children)
@@ -50,3 +50,12 @@ export function mountComponent(vm, el) {
 // 2）模板转换成ast语法树
 // 3）将ast语法树转换成render函数
 // 4）后续每次更新可以只执行render函数（无需再执行ast转化的过程）
+
+export function callHook(vm, hook) {
+    // 此时vm.$options是全局选项和实例选项合并的结果
+    // 所以包含mixin的钩子形成一个队列{create: [fn0, fn1, fn2]}
+    const handlers = vm.$options[hook];
+    if(handlers) {
+        handlers.forEach(handler => handler.call(vm));
+    }
+}

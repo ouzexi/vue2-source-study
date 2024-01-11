@@ -1,16 +1,22 @@
 import { compileToFunction } from './compiler/index.js';
-import { mountComponent } from './lifecycle.js';
+import { callHook, mountComponent } from './lifecycle.js';
 import { initState } from './state.js';
+import { mergeOptions } from './utils.js';
 
 export function initMixin(Vue) { // 给Vue增加init方法
     Vue.prototype._init = function(options) { // 用于初始化操作
         // vm.$options 就是获取用户的配置$nextTick $data $attr ...
         const vm = this;
         
-        vm.$options = options;
+        // this是Vue的实例vm，所以this.constructor是Vue，this.constructor.options是Vue.options
+        // 将全局选项和实例的选项合并
+        vm.$options = mergeOptions(this.constructor.options, options);
 
+        // 触发生命周期钩子
+        callHook(vm, 'beforeCreate');
         // 初始化状态
         initState(vm);
+        callHook(vm, 'created');
 
         // 实现数据挂载到元素
         if(options.el) {
