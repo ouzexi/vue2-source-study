@@ -29,10 +29,30 @@ function patchProps(el, oldProps = {}, props = {}) {
     }
 }
 
+function createComponent(vnode) {
+    let i = vnode.data;
+    // 只有自定义组件的props上有hook属性而且hook对象里存在init方法 而原生的props没有
+    // 调用hook.init方法生成Sub实例并挂载
+    if((i = i.hook) && (i = i.init)) {
+        i(vnode);
+    }
+    // 只有自定义组件的vnode才会在调用hook.init时添加componentInstance属性，并且它的值为对应的Sub实例
+    // 所以如果vnode有componentInstance属性则为组件
+    if(vnode.componentInstance) {
+        return true;
+    }
+}
+
 export function createElm(vnode) {
     let { tag, data, children, text } = vnode;
     // 标签元素
     if(typeof tag === 'string') {
+        // 先判断是组件还是原生元素
+        // 是组件则返回对应的真实节点
+        if(createComponent(vnode)) {
+            return vnode.componentInstance.$el;
+        }
+
         // vnode增加el属性，将虚拟dom和真实dom对应起来，方便后续修改props属性
         vnode.el = document.createElement(tag);
         patchProps(vnode.el, {}, data);
@@ -48,6 +68,12 @@ export function createElm(vnode) {
 
 // 初始化的时候，oldVNode是真实dom 更新时是上一次虚拟DOM
 export function patch(oldVNode, vnode) {
+    // 如果是自定义组件第一次生成时 那么它调用vnode.hook.init方法的$mount方法挂载时 不会传入需要挂载的父节点
+    // 返回自定义组件对应的渲染结果
+    if(!oldVNode) {
+        return createElm(vnode);
+    }
+
     // nodeType是dom元素原生属性
     const isRealElement = oldVNode.nodeType;
     if(isRealElement) {

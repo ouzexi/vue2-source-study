@@ -36,10 +36,8 @@ export function initMixin(Vue) { // 给Vue增加init方法
             if(!ops.template && el) {
                 template = el.outerHTML;
             } else {
-                // 有template模板，使用template模板
-                if(el) {
-                    template = ops.template;
-                }
+                // 有template模板，使用template模板（不一定需要有el，比如自定义组件$mount的时候不需要传入el）
+                template = ops.template;
             }
             // 获取到template 需要对模板进行编译
             if(template) {

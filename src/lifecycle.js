@@ -6,8 +6,16 @@ export function initLifeCycle(Vue) {
     Vue.prototype._update = function(vnode) {
         const vm = this;
         const el = vm.$el;
+        // 第一次产生的虚拟节点保存到_vnode属性上 之后更新时就可以在vm实例上获取到
+        const prevVnode = vm._vnode;
+        vm._vnode = vnode;
         // patch既有初始化的功能 又有更新的功能
-        // vm.$el = patch(el, vnode);
+        // 如果有_vnode属性 说明是更新虚拟节点 否则说明是第一次产生
+        if(prevVnode) {
+            vm.$el = patch(prevVnode, vnode);
+        } else {
+            vm.$el = patch(el, vnode);
+        }
     }
 
     // _c('div', {}, ...children)

@@ -18,6 +18,19 @@ LIFECYCLE.forEach(hook => {
     }
 })
 
+strats.components = function(parentVal, childVal) {
+    // 通过原型链可以获取父组件的全部components
+    const res = Object.create(parentVal);
+
+     // 如果子组件有components选项 则逐项加入（相当于先合并父组件的components 再看子组件，有相同的就覆盖 没有就直接加入）
+    if(childVal) {
+        for(let key in childVal) {
+            res[key] = childVal[key]
+        }
+    }
+    return res;
+}
+
 export function mergeOptions(parent, child) {
     const options = {};
     for(let key in parent) {
