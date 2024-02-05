@@ -1,12 +1,12 @@
 {
-  "name": "vue2-source",
+  "name": "{{name}}",
   "version": "1.0.0",
-  "description": "",
+  "description": "{{description}}",
   "main": "index.js",
   "scripts": {
     "dev": "rollup -cw"
   },
-  "author": "",
+  "author": "{{author}}",
   "license": "ISC",
   "devDependencies": {
     "@babel/core": "^7.23.6",
